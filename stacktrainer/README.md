@@ -58,10 +58,10 @@ Both are enabled by default. Edit `INPUT_KEY` in the configuration section to di
 ### Included Sequences
 
 - `pred stack` — Predator-style stacking
-- `gt easy flip` / `gt eco flip` — Grasshopper twins flip patterns
-- `spread stack (cw)` / `spread stack (ccw)` / `spread stack (alter)` — Spread patterns
-- `flipfire (cw)` / `flipfire (ccw)` — Flip-fire alternating
-- `penta (cw)` / `penta (ccw)` — Penta-shot patterns
+- `gt eco flip` — Grasshopper twins eco flip pattern
+- `spread stack` — Spread pattern (accepts either direction)
+- `flipfire` — Flip-fire alternating (accepts either direction)
+- `penta` — Penta-shot pattern
 
 ## Developers
 
@@ -100,9 +100,11 @@ Add a new object to the `SEQUENCES` array:
     { time: 0.040, releaseEnd: 0.160 },        // release window
     { time: 0.760 },                           // next press
     { time: 0.960, releaseEnd: 1.120 },        // next release
-    { time: 1.520 },                          // final press
-    // with angle input:
+    { time: 1.520 },                           // final press
+    // with directed angle input:
     { time: 0.640, angle: 0, direction: 'cw' },  // rotate to 0° clockwise
+    // with directionless angle input (accepts either direction):
+    { time: 1.000, angle: 45 },                 // rotate 45° either way
   ],
 },
 ```
@@ -114,18 +116,34 @@ Add a new object to the `SEQUENCES` array:
 | `time` | float | Seconds from sequence start |
 | `releaseEnd` | float | Optional end of valid release window (seconds) |
 | `angle` | float | Target rotation angle in degrees |
-| `direction` | string | `'cw'` or `'ccw'` (clockwise/counterclockwise) |
+| `direction` | string | `'cw'` or `'ccw'` (clockwise/counterclockwise). **Optional** — if omitted, either direction is accepted |
 
 Without `angle`, the input is a press/release. The script alternates press/release for each non-angle input unless `releaseEnd` is set (then it is a ranged release).
 
+#### Dual-Target Angle Mode (Directionless)
+
+When `direction` is omitted, the script accepts **either** clockwise or counterclockwise rotation to reach the target angle. At recording start it computes both possible target angles:
+
+```js
+// firstInputPolarAngle = user's starting angle at first input
+cwTarget = (firstInputPolarAngle + angle) % 360
+ccwTarget = (firstInputPolarAngle - angle) % 360
+```
+
+During recording, the script uses whichever target is closest to the user's actual cursor angle at checkpoint time. The results panel records which direction was taken (`CW` or `CCW`).
+
+The canvas draws **both** target lines simultaneously so you can see the valid options at each step.
+
 #### Angle Inputs and Coordinate System
 
-Angles are **cumulative rotations** relative to the first cursor angle, not absolute screen angles. The sign is applied based on direction:
+Angles are **cumulative rotations** relative to the first cursor angle, not absolute screen angles. When a direction is specified, the sign is applied based on direction:
 
 ```js
 // internal: clockwise rotations subtract from polar angle
 item._effectiveAngle = firstInputPolarAngle + sign * item.angle;
 ```
+
+When direction is omitted, both CW and CCW targets are computed and the closest is used at recording time.
 
 The script normalizes to `[0, 360)`.
 
@@ -149,10 +167,11 @@ const ANGLE_GRADES = {
 
 ### Canvas Overlay
 
-The canvas draws two things during recording:
+The canvas draws three things during recording:
 
-1. **Angle line** — white-outlined black line from screen center to `nextRequiredAngle`
-2. **Arcs** — `completedArcs` (persisted, at increasing radii) and a live arc from the required angle to the user's current angle, colored by grade
+1. **Angle lines** — white-outlined black lines from screen center to each valid target angle (single line for directed inputs; dual lines for directionless inputs)
+2. **Arcs** — `completedArcs` (persisted, at increasing radii) and a live arc from the closest target to the user's current angle, colored by grade
+3. **Zero-length arcs** — a hairline arc drawn when the user's angle is equidistant from both targets (within 0.001°), indicating a tie
 
 `drawArc()` handles the canvas coordinate system quirk: canvas uses clockwise-positive angles while math convention is counterclockwise-positive. The function negates angles internally.
 
@@ -176,6 +195,7 @@ Each execution runs in an IIFE (`(function () { ... })()`) so it does not pollut
 ```
 awesome-diepscripts/
 ├── stacktrainer/
-│   └── stacktrainer.js   ← the userscript
-└── README.md              ← this file (repo-level)
+│   ├── stacktrainer.js   ← the userscript
+│   └── README.md          ← this file
+└── README.md              ← repo-level overview
 ```
